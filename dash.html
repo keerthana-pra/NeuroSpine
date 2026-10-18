@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroSpine — Smart Posture Coach</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { display: ['Orbitron','monospace'], body: ['Inter','sans-serif'] }
+    }
+  }
+}
+</script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.15);border-radius:4px}
+  ::selection{background:rgba(6,182,212,0.3);color:#fff}
+
+  /* Background layers */
+  .bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:linear-gradient(rgba(148,163,184,0.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(148,163,184,0.03) 1px,transparent 1px);
+    background-size:50px 50px}
+  .bg-orb{position:fixed;border-radius:50%;pointer-events:none;z-index:0;filter:blur(80px)}
+  .bg-orb-1{width:500px;height:500px;top:-150px;left:-100px;background:rgba(6,182,212,0.06);animation:orbFloat 14s ease-in-out infinite}
+  .bg-orb-2{width:600px;height:600px;bottom:-200px;right:-150px;background:rgba(139,92,246,0.05);animation:orbFloat 18s ease-in-out infinite reverse}
+  .bg-orb-3{width:400px;height:400px;top:40%;left:40%;background:rgba(6,182,212,0.03);animation:orbPulse 10s ease-in-out infinite}
+  @keyframes orbFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(30px,20px)}}
+  @keyframes orbPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.2)}}
+
+  /* Glass card */
+  .glass{background:linear-gradient(145deg,rgba(15,23,42,0.75),rgba(15,23,42,0.45));
+    backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+    border:1px solid rgba(148,163,184,0.07);border-radius:20px;
+    position:relative;overflow:hidden;transition:border-color .4s,box-shadow .4s}
+  .glass:hover{border-color:rgba(148,163,184,0.12)}
+  .glass::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent 5%,rgba(6,182,212,0.35) 50%,transparent 95%);z-index:1}
+  .glass-accent{border-color:rgba(6,182,212,0.2);box-shadow:0 0 30px rgba(6,182,212,0.05)}
+  .glass-warn{border-color:rgba(245,158,11,0.2);box-shadow:0 0 30px rgba(245,158,11,0.05)}
+  .glass-danger{border-color:rgba(239,68,68,0.25);box-shadow:0 0 40px rgba(239,68,68,0.08)}
+  .glass-activity{border-color:rgba(139,92,246,0.3);box-shadow:0 0 40px rgba(139,92,246,0.1)}
+
+  /* Card entrance */
+  .card-enter{animation:cardIn .7s cubic-bezier(.4,0,.2,1) backwards}
+  @keyframes cardIn{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:none}}
+
+  /* Header */
+  .header-bar{position:sticky;top:0;z-index:100;
+    background:linear-gradient(180deg,rgba(3,7,18,0.95),rgba(3,7,18,0.7));
+    backdrop-filter:blur(20px);border-bottom:1px solid rgba(148,163,184,0.06)}
+  .header-glow{position:absolute;bottom:0;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(6,182,212,0.4),rgba(139,92,246,0.3),transparent)}
+  .logo-icon{animation:logoPulse 3s ease-in-out infinite}
+  @keyframes logoPulse{0%,100%{box-shadow:0 0 12px rgba(6,182,212,0.3)}50%{box-shadow:0 0 24px rgba(6,182,212,0.5),0 0 48px rgba(6,182,212,0.15)}}
+
+  /* Connection dot */
+  .conn-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,0.6);transition:all .4s}
+  .conn-dot.on{background:#10b981;box-shadow:0 0 8px rgba(16,185,129,0.6);animation:dotPulse 2s infinite}
+  @keyframes dotPulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  /* Spine vertebrae */
+  .vert{position:absolute;left:50%;width:22px;height:13px;border-radius:6.5px;
+    background:linear-gradient(180deg,rgba(6,182,212,0.7),rgba(6,182,212,0.35));
+    border:1px solid rgba(6,182,212,0.45);
+    box-shadow:0 0 10px rgba(6,182,212,0.15),inset 0 1px 0 rgba(255,255,255,0.08);
+    transform:translateX(-50%);transition:all .5s cubic-bezier(.4,0,.2,1);z-index:2}
+  .vert-warn{background:linear-gradient(180deg,rgba(245,158,11,0.7),rgba(245,158,11,0.35));
+    border-color:rgba(245,158,11,0.45);box-shadow:0 0 10px rgba(245,158,11,0.15),inset 0 1px 0 rgba(255,255,255,0.08)}
+  .vert-bad{background:linear-gradient(180deg,rgba(239,68,68,0.75),rgba(239,68,68,0.35));
+    border-color:rgba(239,68,68,0.5);box-shadow:0 0 12px rgba(239,68,68,0.2),inset 0 1px 0 rgba(255,255,255,0.08)}
+  .vert-act{background:linear-gradient(180deg,rgba(139,92,246,0.8),rgba(139,92,246,0.4));
+    border-color:rgba(139,92,246,0.6);box-shadow:0 0 12px rgba(139,92,246,0.3)}
+  .spine-rod{position:absolute;left:50%;transform:translateX(-50%);width:2px;z-index:1;
+    background:linear-gradient(180deg,rgba(6,182,212,0.6),rgba(6,182,212,0.15));transition:background .5s}
+  .spine-rod-warn{background:linear-gradient(180deg,rgba(245,158,11,0.6),rgba(245,158,11,0.15))}
+  .spine-rod-bad{background:linear-gradient(180deg,rgba(239,68,68,0.6),rgba(239,68,68,0.15))}
+  .spine-rod-act{background:linear-gradient(180deg,rgba(139,92,246,0.6),rgba(139,92,246,0.15))}
+
+  /* Scan line */
+  .scan-line{position:absolute;left:-15%;right:-15%;height:2px;z-index:10;
+    background:linear-gradient(90deg,transparent,rgba(6,182,212,0.5),transparent);
+    box-shadow:0 0 16px rgba(6,182,212,0.25);animation:scanMove 4s ease-in-out infinite}
+  @keyframes scanMove{0%,100%{top:5%;opacity:0}8%{opacity:1}92%{opacity:1}50%{top:92%}}
+
+  /* Toggle */
+  .toggle{width:44px;height:24px;border-radius:12px;position:relative;cursor:pointer;
+    background:rgba(30,41,59,0.8);border:1px solid rgba(148,163,184,0.1);transition:all .3s;flex-shrink:0}
+  .toggle.on{background:rgba(6,182,212,0.15);border-color:rgba(6,182,212,0.35)}
+  .toggle-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;
+    background:#64748b;transition:all .3s}
+  .toggle.on .toggle-knob{left:23px;background:#06b6d4;box-shadow:0 0 10px rgba(6,182,212,0.5)}
+
+  /* Alert item */
+  .alert-item{animation:alertSlide .35s ease}
+  @keyframes alertSlide{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+
+  /* Toast */
+  .toast{animation:toastIn .4s ease}
+  @keyframes toastIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+
+  /* Vignette overlay for bad posture */
+  .vignette-bad{position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(ellipse at center,transparent 40%,rgba(239,68,68,0.04) 100%);
+    transition:opacity .6s;opacity:0}
+  .vignette-bad.show{opacity:1}
+
+  /* Main grid */
+  .main-grid{display:grid;grid-template-columns:290px 1fr 270px;grid-template-rows:auto auto 1fr;
+    gap:18px;padding:22px 28px;flex:1;min-height:0}
+  .col-left{grid-row:1/-1}
+  .col-right{grid-row:1/-1;display:flex;flex-direction:column;gap:18px}
+  .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+
+  /* Inputs */
+  .field-input{width:100%;padding:9px 13px;border-radius:10px;border:1px solid rgba(148,163,184,0.1);
+    background:rgba(3,7,18,0.6);color:#f1f5f9;font-size:13px;font-family:'Inter',sans-serif;
+    outline:none;transition:border-color .3s}
+  .field-input:focus{border-color:rgba(6,182,212,0.5)}
+  .field-input::placeholder{color:#475569}
+
+  /* Connect button */
+  .btn-connect{width:100%;padding:11px;border-radius:12px;border:none;cursor:pointer;
+    font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;
+    text-transform:uppercase;transition:all .3s;
+    background:linear-gradient(135deg,#06b6d4,#0891b2);color:#000;box-shadow:0 0 20px rgba(6,182,212,0.2)}
+  .btn-connect:hover{transform:translateY(-1px);box-shadow:0 0 35px rgba(6,182,212,0.35)}
+  .btn-connect:active{transform:translateY(0)}
+  .btn-connect.connected{background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 0 20px rgba(16,185,129,0.2)}
+
+  /* Responsive */
+  @media(max-width:1200px){
+    .main-grid{grid-template-columns:260px 1fr}
+    .col-right{grid-row:auto;grid-column:1/-1;flex-direction:row;flex-wrap:wrap}
+    .col-right>.glass{flex:1;min-width:220px}}
+  @media(max-width:800px){
+    .main-grid{grid-template-columns:1fr;padding:14px}
+    .col-left,.col-right{grid-row:auto;grid-column:auto}
+    .stats-row{grid-template-columns:1fr 1fr 1fr}}
+  @media(max-width:500px){.stats-row{grid-template-columns:1fr}}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body class="bg-[#030712] text-slate-100 font-body overflow-x-hidden min-h-screen">
+
+<div class="bg-grid"></div>
+<div class="bg-orb bg-orb-1"></div>
+<div class="bg-orb bg-orb-2"></div>
+<div class="bg-orb bg-orb-3"></div>
+<div class="vignette-bad" id="vignette"></div>
+<canvas id="particleBg" style="position:fixed;inset:0;z-index:0;pointer-events:none"></canvas>
+<div id="root" style="position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh"></div>
+
+<script>
+// ──────────────────────────────────────────────
+// Setup
+// ──────────────────────────────────────────────
+const html = htm.bind(React.createElement);
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+const CFG = {
+  fetchMs: 100,
+  maxPts: 120,
+  slouchAt: 1.40,
+  activityAt: 5.75,
+  verts: 14,
+  vertGap: 20,
+  vertStart: 24,
+};
+
+const STATUS_CFG = {
+  good:     { label: 'ALIGNED',  desc: 'Spinal posture is optimal', color: '#10b981', cardClass: 'glass-accent' },
+  bad:      { label: 'SLOUCHING', desc: 'Sustained slouch — motor active', color: '#ef4444', cardClass: 'glass-danger' },
+  activity: { label: 'BENDING',   desc: 'Shoe-tying / Daily activity (Ignored)', color: '#8b5cf6', cardClass: 'glass-activity' },
+};
+
+function getStatus(d) { 
+  if (d > CFG.activityAt) return 'activity';
+  if (d >= CFG.slouchAt) return 'bad';
+  return 'good'; 
+}
+
+function fmtTime(ms) { const s = Math.floor(ms/1000); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+
+// ──────────────────────────────────────────────
+// Gauge Drawing
+// ──────────────────────────────────────────────
+function drawGauge(ctx, w, h, val) {
+  const cx = w / 2, cy = h * 0.88;
+  const r = Math.max(10, Math.min(cx * 0.82, cy * 0.78));
+  const lw = 14, maxV = 8.0; // Scaled up to 8.0 m/s² max to display shoe-tying range cleanly
+  const v = Math.min(Math.max(val, 0), maxV);
+  const vAng = Math.PI + (v / maxV) * Math.PI;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Background arc
+  ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI);
+  ctx.strokeStyle = 'rgba(30,41,59,0.6)'; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
+
+  // Zone fills
+  const zones = [
+    { s: 0, e: CFG.slouchAt / maxV, c: 'rgba(16,185,129,0.15)' },
+    { s: CFG.slouchAt / maxV, e: CFG.activityAt / maxV, c: 'rgba(239,68,68,0.15)' },
+    { s: CFG.activityAt / maxV, e: 1, c: 'rgba(139,92,246,0.20)' },
+  ];
+  zones.forEach(z => {
+    ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI + z.s * Math.PI, Math.PI + z.e * Math.PI);
+    ctx.strokeStyle = z.c; ctx.lineWidth = lw; ctx.lineCap = 'butt'; ctx.stroke();
+  });
+
+  // Value arc
+  if (v > 0.01) {
+    const g = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
+    g.addColorStop(0, '#10b981'); g.addColorStop(0.2, '#06b6d4'); g.addColorStop(0.7, '#ef4444'); g.addColorStop(1, '#8b5cf6');
+    ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, vAng);
+    ctx.strokeStyle = g; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
+
+    // Glow
+    const gc = v > CFG.activityAt ? 'rgba(139,92,246,0.3)' : v >= CFG.slouchAt ? 'rgba(239,68,68,0.25)' : 'rgba(6,182,212,0.15)';
+    ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, vAng);
+    ctx.strokeStyle = gc; ctx.lineWidth = lw + 14; ctx.lineCap = 'round'; ctx.stroke();
+  }
+
+  // Needle dot
+  const nx = cx + r * Math.cos(vAng), ny = cy + r * Math.sin(vAng);
+  ctx.beginPath(); ctx.arc(nx, ny, 3.5, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+  const nc = v > CFG.activityAt ? 'rgba(139,92,246,0.5)' : v >= CFG.slouchAt ? 'rgba(239,68,68,0.5)' : 'rgba(6,182,212,0.3)';
+  ctx.beginPath(); ctx.arc(nx, ny, 9, 0, Math.PI * 2); ctx.fillStyle = nc; ctx.fill();
+
+  // Ticks
+  for (let i = 0; i <= 20; i++) {
+    const a = Math.PI + (i / 20) * Math.PI;
+    const inner = r - lw / 2 - 7, outer = r - lw / 2 - 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + inner * Math.cos(a), cy + inner * Math.sin(a));
+    ctx.lineTo(cx + outer * Math.cos(a), cy + outer * Math.sin(a));
+    ctx.strokeStyle = i % 5 === 0 ? 'rgba(148,163,184,0.3)' : 'rgba(148,163,184,0.1)';
+    ctx.lineWidth = i % 5 === 0 ? 1.5 : 1; ctx.lineCap = 'butt'; ctx.stroke();
+  }
+}
+
+// ──────────────────────────────────────────────
+// Particles (runs once on the bg canvas)
+// ──────────────────────────────────────────────
+(function initParticles() {
+  const c = document.getElementById('particleBg'), ctx = c.getContext('2d');
+  let pts = [];
+  function resize() { c.width = innerWidth; c.height = innerHeight; }
+  resize(); window.addEventListener('resize', resize);
+  for (let i = 0; i < 45; i++) pts.push({
+    x: Math.random() * c.width, y: Math.random() * c.height,
+    vx: (Math.random() - .5) * .25, vy: (Math.random() - .5) * .25,
+    r: Math.random() * 1.4 + .4, a: Math.random() * .25 + .04
+  });
+  (function loop() {
+    ctx.clearRect(0, 0, c.width, c.height);
+    pts.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = c.width; if (p.x > c.width) p.x = 0;
+      if (p.y < 0) p.y = c.height; if (p.y > c.height) p.y = 0;
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(.1, p.r), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(6,182,212,${p.a})`; ctx.fill();
+    });
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+      const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y, d = Math.sqrt(dx*dx+dy*dy);
+      if (d < 140) {
+        ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[j].x, pts[j].y);
+        ctx.strokeStyle = `rgba(6,182,212,${0.035*(1-d/140)})`; ctx.lineWidth = .5; ctx.stroke();
+      }
+    }
+    requestAnimationFrame(loop);
+  })();
+})();
+
+// ──────────────────────────────────────────────
+// Components
+// ──────────────────────────────────────────────
+
+// Toast container
+function Toasts({ items }) {
+  return html`<div className="fixed top-20 right-7 z-[999] flex flex-col gap-2" style=${{ pointerEvents: 'none' }}>
+    ${items.map(t => html`
+      <div key=${t.id} className=${`toast glass px-5 py-3 flex items-center gap-3 text-sm font-medium`}
+        style=${{ pointerEvents: 'auto', borderColor: t.type==='success'?'rgba(16,185,129,0.4)':t.type==='error'?'rgba(239,68,68,0.4)':'rgba(6,182,212,0.4)' }}>
+        <i className=${`fas ${t.type==='success'?'fa-check-circle':t.type==='error'?'fa-times-circle':'fa-info-circle'}`}
+          style=${{ color: t.type==='success'?'#10b981':t.type==='error'?'#ef4444':'#06b6d4' }}></i>
+        <span>${t.msg}</span>
+      </div>`)}
+  </div>`;
+}
+
+// Header
+function Header({ connected, onFullscreen, onInfo }) {
+  return html`<header className="header-bar px-7 py-3.5 flex items-center justify-between">
+    <div className="header-glow"></div>
+    <div className="flex items-center gap-3.5">
+      <div className="logo-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg"
+        style=${{ background:'linear-gradient(135deg,#06b6d4,#8b5cf6)' }}>
+        <i className="fas fa-bone text-white"></i>
+      </div>
+      <div>
+        <div className="font-display font-black text-base tracking-wider"
+          style=${{ background:'linear-gradient(135deg,#06b6d4,#8b5cf6)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent' }}>NEUROSPINE</div>
+        <div className="text-[9px] text-slate-600 tracking-[3px] uppercase hidden sm:block">Smart Posture Coach</div>
+      </div>
+    </div>
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-semibold cursor-default"
+        style=${{ background:'rgba(15,23,42,0.6)',border:'1px solid rgba(148,163,184,0.08)' }}>
+        <div className=${`conn-dot ${connected?'on':''}`}></div>
+        <span className="text-slate-400">${connected ? 'Live' : 'Offline'}</span>
+      </div>
+      <button onClick=${onFullscreen} className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 text-sm cursor-pointer hover:text-cyan-400 transition-colors"
+        style=${{ background:'rgba(15,23,42,0.5)',border:'1px solid rgba(148,163,184,0.08)' }}
+        aria-label="Fullscreen"><i className="fas fa-expand"></i></button>
+      <button onClick=${onInfo} className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 text-sm cursor-pointer hover:text-cyan-400 transition-colors"
+        style=${{ background:'rgba(15,23,42,0.5)',border:'1px solid rgba(148,163,184,0.08)' }}
+        aria-label="Info"><i className="fas fa-microchip"></i></button>
+    </div>
+  </header>`;
+}
+
+// Spine visualization
+function SpineCard({ status }) {
+  const verts = useMemo(() => {
+    return Array.from({ length: CFG.verts }, (_, i) => {
+      const top = CFG.vertStart + i * CFG.vertGap;
+      let ox = 0;
+      if (status === 'bad') ox = Math.sin((i / (CFG.verts - 1)) * Math.PI) * 16;
+      else if (status === 'activity') ox = Math.sin((i / (CFG.verts - 1)) * Math.PI) * 24;
+      const cls = status === 'bad' ? 'vert-bad' : status === 'activity' ? 'vert-act' : '';
+      return { i, top, ox, cls };
+    });
+  }, [status]);
+
+  const rodH = CFG.vertStart + (CFG.verts - 1) * CFG.vertGap + 13 - CFG.vertStart;
+  const rodCls = status === 'bad' ? 'spine-rod-bad' : status === 'activity' ? 'spine-rod-act' : '';
+  const cfg = STATUS_CFG[status];
+  const cardCls = cfg.cardClass;
+
+  return html`<div className=${`glass ${cardCls} p-6 flex-1 flex flex-col items-center justify-center min-h-[380px] card-enter`} style=${{ animationDelay: '.1s' }}>
+    <div className="scan-line"></div>
+    <div className="relative" style=${{ width:'100px',height: rodH + 16 }}>
+      <div className=${`spine-rod ${rodCls}`} style=${{ top: CFG.vertStart + 'px', height: rodH + 'px' }}></div>
+      ${verts.map(v => html`
+        <div key=${v.i} className=${`vert ${v.cls}`}
+          style=${{ top: v.top + 'px', transform: `translateX(calc(-50% + ${v.ox}px))` }} />`)}
+    </div>
+    <div className="mt-6 text-center">
+      <div className="font-display text-sm font-bold tracking-[4px]" style=${{ color: cfg.color }}>${cfg.label}</div>
+      <div className="text-[11px] text-slate-500 mt-1.5">${cfg.desc}</div>
+    </div>
+  </div>`;
+}
+
+// Angle display
+function AngleCard({ deviation, status }) {
+  const c = STATUS_CFG[status].color;
+  return html`<div className="glass p-5 text-center card-enter" style=${{ animationDelay: '.15s' }}>
+    <div className="font-display text-4xl font-black leading-none" style=${{ color: c }}>
+      ${deviation.toFixed(2)}<span className="text-sm text-slate-600 ml-1">m/s²</span>
+    </div>
+    <div className="text-[9px] text-slate-500 uppercase tracking-[2.5px] mt-2">Posture Tilt Deviation</div>
+  </div>`;
+}
+
+// Single stat card
+function StatCard({ icon, iconBg, iconColor, value, valueColor, label, delay }) {
+  return html`<div className="glass p-5 text-center card-enter" style=${{ animationDelay: delay }}>
+    <div className="w-11 h-11 rounded-xl mx-auto mb-3 flex items-center justify-center text-lg"
+      style=${{ background: iconBg, color: iconColor }}><i className=${icon}></i></div>
+    <div className="font-display text-2xl font-bold leading-tight" style=${{ color: valueColor }}>${value}</div>
+    <div className="text-[9px] text-slate-500 uppercase tracking-[2px] mt-1">${label}</div>
+  </div>`;
+}
+
+// Gauge panel
+function GaugePanel({ deviation, status }) {
+  const canvasRef = useRef(null);
+  const c = STATUS_CFG[status].color;
+  useEffect(() => {
+    const cv = canvasRef.current; if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const dpr = devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawGauge(ctx, w, h, deviation);
+  }, [deviation]);
+  return html`<div className="glass p-6 card-enter" style=${{ animationDelay: '.25s' }}>
+    <div className="text-[10px] font-semibold uppercase tracking-[3px] text-slate-500 mb-4 flex items-center gap-2">
+      <i className="fas fa-tachometer-alt text-cyan-500 text-xs"></i> Posture Deviation Gauge
+    </div>
+    <div className="relative">
+      <canvas ref=${canvasRef} className="w-full" style=${{ height: '220px' }}></canvas>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] text-center">
+        <div className="font-display text-4xl font-black leading-none" style=${{ color: c }}>${deviation.toFixed(2)}</div>
+        <div className="text-[9px] text-slate-500 uppercase tracking-[2px] mt-1">m/s² Deviation</div>
+      </div>
+    </div>
+    <div className="flex justify-center gap-6 mt-4 flex-wrap text-[10px]">
+      <div className="flex items-center gap-1.5 text-slate-400"><div className="w-2 h-2 rounded-full bg-[#10b981]"></div>Good (&lt;1.40)</div>
+      <div className="flex items-center gap-1.5 text-slate-400"><div className="w-2 h-2 rounded-full bg-[#ef4444]"></div>Slouch (1.40 - 5.75)</div>
+      <div className="flex items-center gap-1.5 text-slate-400"><div className="w-2 h-2 rounded-full bg-[#8b5cf6]"></div>Activity / Shoes (&gt;5.75)</div>
+    </div>
+  </div>`;
+}
+
+// Chart panel
+function ChartPanel({ chartRef }) {
+  return html`<div className="glass p-6 card-enter" style=${{ animationDelay: '.3s' }}>
+    <div className="text-[10px] font-semibold uppercase tracking-[3px] text-slate-500 mb-4 flex items-center gap-2">
+      <i className="fas fa-chart-line text-cyan-500 text-xs"></i> Real-Time Deviation History
+    </div>
+    <div style=${{ height: '200px', position: 'relative' }}>
+      <canvas ref=${chartRef}></canvas>
+    </div>
+  </div>`;
+}
+
+// Connect card
+function ConnectCard({ ip, endpoint, connected, onIpChange, onEndpointChange, onConnect }) {
+  return html`<div className="glass p-5 card-enter" style=${{ animationDelay: '.12s' }}>
+    <div className="text-[10px] font-semibold uppercase tracking-[3px] text-slate-500 mb-4 flex items-center gap-2">
+      <i className="fas fa-wifi text-cyan-500 text-xs"></i> Device Connection
+    </div>
+    <div className="text-[9px] text-slate-500 uppercase tracking-[1.5px] mb-1.5">ESP32 IP Address</div>
+    <input className="field-input mb-3" type="text" value=${ip} onInput=${e => onIpChange(e.target.value)} placeholder="192.168.4.1" aria-label="ESP32 IP" />
+    <div className="text-[9px] text-slate-500 uppercase tracking-[1.5px] mb-1.5">Endpoint Path</div>
+    <input className="field-input mb-4" type="text" value=${endpoint} onInput=${e => onEndpointChange(e.target.value)} placeholder="/data" aria-label="Endpoint" />
+    <button className=${`btn-connect ${connected?'connected':''}`} onClick=${onConnect}>
+      ${connected ? 'Connected' : 'Connect Device'}
+    </button>
+  </div>`;
+}
+
+// Motor toggle
+function MotorCard({ enabled, onToggle }) {
+  return html`<div className="glass p-5 card-enter" style=${{ animationDelay: '.18s' }}>
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2.5">
+        <div className="text-cyan-400 text-base"><i className="fas fa-mobile-screen-button"></i></div>
+        <div>
+          <div className="text-xs text-slate-300 font-medium">Haptic Motor</div>
+          <div className="text-[10px] text-slate-600">Vibration Feedback</div>
+        </div>
+      </div>
+      <div className=${`toggle ${enabled?'on':''}`} onClick=${onToggle} role="switch" aria-checked=${enabled} tabIndex="0"
+        onKeyDown=${e => { if(e.key==='Enter'||e.key===' '){e.preventDefault();onToggle()} }}>
+        <div className="toggle-knob"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Session stats
+function SessionStats({ peak, avg, min, samples }) {
+  const rows = [
+    { l: 'Peak Deviation', v: peak.toFixed(2)+' m/s²', c: '#ef4444' },
+    { l: 'Avg Deviation', v: avg.toFixed(2)+' m/s²', c: '#f59e0b' },
+    { l: 'Best Deviation', v: (min===Infinity?0:min).toFixed(2)+' m/s²', c: '#10b981' },
+    { l: 'Samples', v: samples.toLocaleString(), c: '#06b6d4' },
+  ];
+  return html`<div className="glass p-5 card-enter" style=${{ animationDelay: '.22s' }}>
+    <div className="text-[10px] font-semibold uppercase tracking-[3px] text-slate-500 mb-3 flex items-center gap-2">
+      <i className="fas fa-chart-bar text-cyan-500 text-xs"></i> Session Stats
+    </div>
+    <div className="flex flex-col gap-2">
+      ${rows.map(r => html`
+        <div key=${r.l} className="flex justify-between items-center px-3 py-2.5 rounded-lg"
+          style=${{ background:'rgba(3,7,18,0.5)',border:'1px solid rgba(148,163,184,0.06)' }}>
+          <span className="text-[11px] text-slate-500">${r.l}</span>
+          <span className="font-display text-xs font-bold" style=${{ color: r.c }}>${r.v}</span>
+        </div>`)}
+    </div>
+  </div>`;
+}
+
+// Alert log
+function AlertLog({ alerts }) {
+  const listRef = useRef(null);
+  return html`<div className="glass p-5 flex-1 flex flex-col min-h-0 card-enter" style=${{ animationDelay: '.28s' }}>
+    <div className="text-[10px] font-semibold uppercase tracking-[3px] text-slate-500 mb-3 flex items-center gap-2">
+      <i className="fas fa-bell text-cyan-500 text-xs"></i> Alert Log
+    </div>
+    <div ref=${listRef} className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1" style=${{ maxHeight:'300px' }}>
+      ${alerts.length === 0 && html`<div className="text-[11px] text-slate-600 text-center py-6">No alerts yet</div>`}
+      ${alerts.map(a => html`
+        <div key=${a.id} className="alert-item flex items-start gap-2.5 px-3 py-2.5 rounded-lg"
+          style=${{ background:'rgba(3,7,18,0.5)',border:'1px solid rgba(148,163,184,0.06)' }}>
+          <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style=${{
+            background: a.level==='green'?'#10b981':a.level==='purple'?'#8b5cf6':'#ef4444',
+            boxShadow: `0 0 6px ${a.level==='green'?'rgba(16,185,129,0.5)':a.level==='purple'?'rgba(139,92,246,0.5)':'rgba(239,68,68,0.5)'}`
+          }}></div>
+          <div>
+            <div className="font-display text-[9px] text-slate-600">${a.time}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">${a.msg}</div>
+          </div>
+        </div>`)}
+    </div>
+  </div>`;
+}
+
+// ──────────────────────────────────────────────
+// App
+// ──────────────────────────────────────────────
+function App() {
+  const [connected, setConnected] = useState(false);
+  const [deviation, setDeviation] = useState(0);
+  const [ip, setIp] = useState('192.168.4.1');
+  const [endpoint, setEndpoint] = useState('/data');
+  const [motorOn, setMotorOn] = useState(true);
+  const [sessionStart, setSessionStart] = useState(null);
+  const [alertCount, setAlertCount] = useState(0);
+  const [peak, setPeak] = useState(0);
+  const [minD, setMinD] = useState(Infinity);
+  const [totalD, setTotalD] = useState(0);
+  const [samples, setSamples] = useState(0);
+  const [goodSamples, setGoodSamples] = useState(0);
+  const [alerts, setAlerts] = useState([]);
+  const [toasts, setToasts] = useState([]);
+
+  const chartRef = useRef(null);
+  const chartInst = useRef(null);
+  const fetchTimer = useRef(null);
+  const lastStatus = useRef('good');
+  const lastAlertT = useRef(0);
+  const toastId = useRef(0);
+  const alertId = useRef(0);
+  const sessionRef = useRef(null);
+
+  const status = getStatus(deviation);
+
+  const addToast = useCallback((msg, type) => {
+    const id = ++toastId.current;
+    setToasts(p => [...p, { id, msg, type }]);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3200);
+  }, []);
+
+  const addAlert = useCallback((msg, level) => {
+    const id = ++alertId.current;
+    const t = new Date().toTimeString().split(' ')[0];
+    setAlerts(p => [{ id, time: t, msg, level }, ...p].slice(0, 50));
+  }, []);
+
+  // Init chart with 8.0 m/s² scale max
+  useEffect(() => {
+    const cv = chartRef.current; if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 200);
+    grad.addColorStop(0, 'rgba(6,182,212,0.12)');
+    grad.addColorStop(1, 'rgba(6,182,212,0.0)');
+    chartInst.current = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Deviation', data: [], borderColor: '#06b6d4', backgroundColor: grad, borderWidth: 2, pointRadius: 0, fill: true, tension: .4 },
+          { label: 'Slouch Threshold', data: [], borderColor: 'rgba(239,68,68,0.4)', borderWidth: 1, borderDash: [5,4], pointRadius: 0, fill: false },
+          { label: 'Activity Cutoff', data: [], borderColor: 'rgba(139,92,246,0.4)', borderWidth: 1, borderDash: [5,4], pointRadius: 0, fill: false },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 0 },
+        scales: {
+          x: { display: false },
+          y: { min: 0, max: 8.0, grid: { color: 'rgba(148,163,184,0.04)', drawBorder: false },
+            ticks: { color: '#475569', font: { family: 'Orbitron', size: 8 }, callback: v => v.toFixed(1) } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(15,23,42,0.95)', borderColor: 'rgba(148,163,184,0.1)', borderWidth: 1,
+            titleFont: { family: 'Orbitron', size: 9 }, bodyFont: { family: 'Inter', size: 11 },
+            titleColor: '#06b6d4', bodyColor: '#f1f5f9',
+            callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y.toFixed(2) + ' m/s²' }
+          }
+        },
+        interaction: { intersect: false, mode: 'index' },
+      }
+    });
+    return () => { if (chartInst.current) chartInst.current.destroy(); };
+  }, []);
+
+  const pushChart = useCallback((val) => {
+    const ch = chartInst.current; if (!ch) return;
+    const now = new Date();
+    const lbl = String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+    ch.data.labels.push(lbl);
+    ch.data.datasets[0].data.push(val);
+    ch.data.datasets[1].data.push(CFG.slouchAt);
+    ch.data.datasets[2].data.push(CFG.activityAt);
+    const lc = val > CFG.activityAt ? '#8b5cf6' : val >= CFG.slouchAt ? '#ef4444' : '#06b6d4';
+    ch.data.datasets[0].borderColor = lc;
+    ch.data.datasets[0].backgroundColor = val > CFG.activityAt ? 'rgba(139,92,246,0.1)' : val >= CFG.slouchAt ? 'rgba(239,68,68,0.06)' : 'rgba(6,182,212,0.08)';
+    if (ch.data.labels.length > CFG.maxPts) ch.data.labels.shift();
+    if (ch.data.datasets[0].data.length > CFG.maxPts) ch.data.datasets[0].data.shift();
+    if (ch.data.datasets[1].data.length > CFG.maxPts) ch.data.datasets[1].data.shift();
+    if (ch.data.datasets[2].data.length > CFG.maxPts) ch.data.datasets[2].data.shift();
+    ch.update('none');
+  }, []);
+
+  useEffect(() => {
+    document.getElementById('vignette').classList.toggle('show', status === 'bad');
+  }, [status]);
+
+  useEffect(() => {
+    if (sessionStart) {
+      sessionRef.current = setInterval(() => {
+        const el = document.getElementById('sessionTime');
+        if (el) el.textContent = fmtTime(Date.now() - sessionStart);
+      }, 1000);
+    }
+    return () => clearInterval(sessionRef.current);
+  }, [sessionStart]);
+
+  const processData = useCallback((val) => {
+    const v = parseFloat(val) || 0;
+    setDeviation(v);
+    const st = getStatus(v);
+
+    setSamples(p => {
+      const n = p + 1;
+      setPeak(pp => Math.max(pp, v));
+      setMinD(pp => Math.min(pp === Infinity ? v : pp, v));
+      setTotalD(pp => pp + v);
+      if (st === 'good') setGoodSamples(gp => gp + 1);
+      return n;
+    });
+
+    if (st !== lastStatus.current) {
+      if (st === 'bad') {
+        setAlertCount(p => p + 1);
+        const now = Date.now();
+        if (now - lastAlertT.current > 3000) { addAlert('Slouch detected (>2.5s hold). Vibration motor active.', 'red'); lastAlertT.current = now; }
+      } else if (st === 'activity') {
+        addAlert('👟 Deep tilt/tying shoes detected. Motor alert suppressed.', 'purple');
+      } else if (st === 'good' && lastStatus.current !== 'good') {
+        addAlert('Posture aligned and corrected.', 'green');
+      }
+      lastStatus.current = st;
+    }
+    pushChart(v);
+  }, [addAlert, pushChart]);
+
+  const fetchData = useCallback(() => {
+    const url = `http://${ip.trim()}${endpoint.trim()}`;
+    fetch(url, { mode: 'cors', signal: AbortSignal.timeout(600) })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(t => {
+        if (isNaN(parseFloat(t))) throw new Error('NaN');
+        if (!connected) {
+          setConnected(true);
+          if (!sessionStart) setSessionStart(Date.now());
+          addToast('Device paired successfully', 'success');
+          addAlert('ESP32 device online. Posture coaching active.', 'green');
+        }
+        processData(t);
+      })
+      .catch(() => {
+        if (connected) {
+          setConnected(false);
+          addToast('Connection lost — showing demo mode', 'error');
+          addAlert('Connection to ESP32 interrupted.', 'red');
+        }
+      });
+  }, [ip, endpoint, connected, sessionStart, addToast, addAlert, processData]);
+
+  // Demo simulator with shoe-tying spikes
+  useEffect(() => {
+    if (connected) return;
+    let raf;
+    (function demo() {
+      const t = Date.now() / 1000;
+      // Cycle through good -> slouch -> deep shoe tying bend
+      let v = Math.max(0, 0.4 + Math.sin(t * 0.3) * 1.8 + (Math.random() - .5) * .08);
+      if (Math.sin(t * 0.1) > 0.85) { v = 6.2 + Math.sin(t * 2) * 0.5; } // Shoe-tying spike
+      processData(v);
+      raf = requestAnimationFrame(demo);
+    })();
+    return () => cancelAnimationFrame(raf);
+  }, [connected, processData]);
+
+  const handleConnect = useCallback(() => {
+    if (connected) {
+      setConnected(false);
+      clearInterval(fetchTimer.current);
+      fetchTimer.current = null;
+      addToast('Disconnected from device', 'info');
+      addAlert('Manual disconnect.', 'amber');
+    } else {
+      if (fetchTimer.current) clearInterval(fetchTimer.current);
+      fetchTimer.current = setInterval(fetchData, CFG.fetchMs);
+      fetchData();
+      addToast('Attempting to connect to ESP32...', 'info');
+    }
+  }, [connected, fetchData, addToast, addAlert]);
+
+  useEffect(() => () => clearInterval(fetchTimer.current), []);
+
+  const goodPct = samples > 0 ? Math.round((goodSamples / samples) * 100) : 100;
+  const avg = samples > 0 ? totalD / samples : 0;
+
+  return html`
+    <${Toasts} items=${toasts} />
+    <${Header} connected=${connected}
+      onFullscreen=${() => { if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }}
+      onInfo=${() => addToast('NeuroSpine v2.0 — Dual-Filter Activity Suppression Enabled', 'info')} />
+
+    <main className="main-grid">
+      <div className="col-left flex flex-col gap-4">
+        <${SpineCard} status=${status} />
+        <${AngleCard} deviation=${deviation} status=${status} />
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <div className="stats-row">
+          <${StatCard} icon="fa-clock" iconBg="rgba(6,182,212,0.1)" iconColor="#06b6d4"
+            value=${sessionStart ? undefined : '00:00'} valueColor="#06b6d4" label="Session Time" delay=".18s" />
+          <div className="glass p-5 text-center card-enter" style=${{ animationDelay: '.2s' }}>
+            <div className="w-11 h-11 rounded-xl mx-auto mb-3 flex items-center justify-center text-lg"
+              style=${{ background:'rgba(16,185,129,0.1)',color:'#10b981' }}><i className="fas fa-check-circle"></i></div>
+            <div className="font-display text-2xl font-bold leading-tight" style=${{ color:'#10b981' }}>${goodPct}%</div>
+            <div className="text-[9px] text-slate-500 uppercase tracking-[2px] mt-1">Good Posture</div>
+          </div>
+          <${StatCard} icon="fa-exclamation-triangle" iconBg="rgba(245,158,11,0.1)" iconColor="#f59e0b"
+            value=${alertCount} valueColor="#f59e0b" label="Alerts" delay=".22s" />
+        </div>
+        <div className="stats-row" style=${{ marginTop: '-72px', paddingTop: 0, position:'relative', zIndex:2, pointerEvents:'none' }}>
+          <div className="glass p-5 text-center" style=${{ opacity:0, height:0, padding:0, margin:0, border:'none', overflow:'hidden' }}></div>
+          <div className="glass p-5 text-center" style=${{ opacity:0, height:0, padding:0, margin:0, border:'none', overflow:'hidden' }}></div>
+          <div className="glass p-5 text-center" style=${{ opacity:0, height:0, padding:0, margin:0, border:'none', overflow:'hidden' }}></div>
+        </div>
+        <div id="sessionTime" className="font-display text-2xl font-bold text-center" style=${{ color:'#06b6d4', marginTop:'-82px', marginBottom:'42px', position:'relative', zIndex:3 }}>
+          ${sessionStart ? fmtTime(Date.now() - sessionStart) : '00:00'}
+        </div>
+        <${GaugePanel} deviation=${deviation} status=${status} />
+        <${ChartPanel} chartRef=${chartRef} />
+      </div>
+
+      <div className="col-right">
+        <${ConnectCard} ip=${ip} endpoint=${endpoint} connected=${connected}
+          onIpChange=${setIp} onEndpointChange=${setEndpoint} onConnect=${handleConnect} />
+        <${MotorCard} enabled=${motorOn} onToggle=${() => { setMotorOn(p => !p); addToast(motorOn ? 'Haptic feedback disabled' : 'Haptic feedback enabled', 'info'); }} />
+        <${SessionStats} peak=${peak} avg=${avg} min=${minD} samples=${samples} />
+        <${AlertLog} alerts=${alerts} />
+      </div>
+    </main>
+  `;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
+</script>
+</body>
+</html>
